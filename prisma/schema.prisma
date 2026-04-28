@@ -31,53 +31,54 @@ enum VehicleCondition {
   SALVAGE
 }
 
+enum VehicleType {
+  SEDAN
+  SUV
+  TRUCK
+  VAN
+  RV
+  CONVERTIBLE
+}
+
+enum FuelType {
+  GASOLINE
+  DIESEL
+  ELECTRIC
+  HYBRID
+  PHEV
+}
+
+enum Transmission {
+  AUTOMATIC
+  MANUAL
+}
+
 // ---------------------------------------------------------------------------
 //  Models
 // ---------------------------------------------------------------------------
 
 /// Represents a single vehicle listing in the lot inventory.
 model Vehicle {
-  // ── Primary key ──────────────────────────────────────────────────────────
-  id String @id @default(uuid()) @db.Uuid
+  id           String       @id @default(uuid())
+  make         String // Brand
+  model        String
+  year         Int
+  price        Decimal // Critical for the $15k filter
+  quantity     Int          @default(1)
+  mileage      Int
+  bodyType     VehicleType
+  fuelType     FuelType
+  transmission Transmission
+  description  String? // The "Reasoning" source for the AI
+  features     String[] // e.g., ["Solar Panels", "Tow Hitch", "Sleeps 4"]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
-  // ── Core identification ───────────────────────────────────────────────────
-  /// Vehicle Identification Number — globally unique, immutable.
-  vin String @unique @db.VarChar(17)
-
-  make  String @db.VarChar(100)
-  model String @db.VarChar(100)
-  year  Int
-
-  // ── Financials ────────────────────────────────────────────────────────────
-  /// Asking price in USD. Must be >= 0 (enforced via @check in raw SQL or app layer).
-  price Decimal @db.Decimal(12, 2)
-
-  // ── Physical stats ────────────────────────────────────────────────────────
-  mileage   Int
+  // We keep VIN and condition to avoid losing constraints
+  vin       String           @unique @db.VarChar(17)
   condition VehicleCondition
 
-  // ── Inventory ─────────────────────────────────────────────────────────────
-  /// Number of units available on the lot. Must be >= 0.
-  quantity Int @default(1)
-
-  // ── Unstructured / AI-ready data ─────────────────────────────────────────
-  /// Free-text feature tags (e.g. ["Heated Seats", "Sunroof", "AWD"]).
-  /// Stored as a native PostgreSQL text array for fast @> containment queries.
-  features String[]
-
-  /// Free-form internal notes, service history, or future AI-generated summaries.
-  notes String? @db.Text
-
-  // ── Audit timestamps ──────────────────────────────────────────────────────
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // ── Indexes ───────────────────────────────────────────────────────────────
-  @@index([make, model]) // fast catalog browsing by make/model
-  @@index([year]) // filter by year range
-  @@index([price]) // sort / range queries on price
-  @@index([mileage]) // filter low-mileage vehicles
-  @@index([condition]) // filter by condition
-  @@index([createdAt]) // recently added listings
+  @@index([price]) // Optimizes the budget queries
+  @@index([bodyType]) // Optimizes the "RV vs Car" logic
   @@map("vehicles")
 }

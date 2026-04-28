@@ -4,6 +4,7 @@
   "description": "Used Car Lot — Neon + Prisma serverless PostgreSQL backend",
   "license": "MIT",
   "scripts": {
+    "start":       "tsx src/index.ts",
     "db:push":     "prisma db push",
     "db:pull":     "prisma db pull",
     "db:studio":   "prisma studio",
@@ -15,6 +16,8 @@
     "dotenv":         "^16.4.5"
   },
   "devDependencies": {
-    "prisma": "^5.22.0"
+    "prisma":     "^5.22.0",
+    "tsx":        "^4.19.2",
+    "typescript": "^5.8.3"
   }
 }
