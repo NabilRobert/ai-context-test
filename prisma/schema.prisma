@@ -1,0 +1,83 @@
+// =============================================================================
+//  Used Car Lot — Prisma Schema
+//  Database:   Neon Serverless PostgreSQL (dual-link architecture)
+//  ORM:        Prisma (db push → production-ready, no migration history needed)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection — used by the application at runtime (PgBouncer, port 6543)
+  url       = env("DATABASE_URL")
+  // Direct connection — used by Prisma CLI for migrations / db push (port 5432)
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+//  Enums
+// ---------------------------------------------------------------------------
+
+/// Physical condition of the vehicle as assessed at intake.
+enum VehicleCondition {
+  NEW
+  LIKE_NEW
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  SALVAGE
+}
+
+// ---------------------------------------------------------------------------
+//  Models
+// ---------------------------------------------------------------------------
+
+/// Represents a single vehicle listing in the lot inventory.
+model Vehicle {
+  // ── Primary key ──────────────────────────────────────────────────────────
+  id String @id @default(uuid()) @db.Uuid
+
+  // ── Core identification ───────────────────────────────────────────────────
+  /// Vehicle Identification Number — globally unique, immutable.
+  vin String @unique @db.VarChar(17)
+
+  make  String @db.VarChar(100)
+  model String @db.VarChar(100)
+  year  Int
+
+  // ── Financials ────────────────────────────────────────────────────────────
+  /// Asking price in USD. Must be >= 0 (enforced via @check in raw SQL or app layer).
+  price Decimal @db.Decimal(12, 2)
+
+  // ── Physical stats ────────────────────────────────────────────────────────
+  mileage   Int
+  condition VehicleCondition
+
+  // ── Inventory ─────────────────────────────────────────────────────────────
+  /// Number of units available on the lot. Must be >= 0.
+  quantity Int @default(1)
+
+  // ── Unstructured / AI-ready data ─────────────────────────────────────────
+  /// Free-text feature tags (e.g. ["Heated Seats", "Sunroof", "AWD"]).
+  /// Stored as a native PostgreSQL text array for fast @> containment queries.
+  features String[]
+
+  /// Free-form internal notes, service history, or future AI-generated summaries.
+  notes String? @db.Text
+
+  // ── Audit timestamps ──────────────────────────────────────────────────────
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Indexes ───────────────────────────────────────────────────────────────
+  @@index([make, model]) // fast catalog browsing by make/model
+  @@index([year]) // filter by year range
+  @@index([price]) // sort / range queries on price
+  @@index([mileage]) // filter low-mileage vehicles
+  @@index([condition]) // filter by condition
+  @@index([createdAt]) // recently added listings
+  @@map("vehicles")
+}

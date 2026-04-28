@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Environment — NEVER commit real credentials
+.env
+
+# Prisma generated client (regenerate with `prisma generate`)
+# Uncomment the line below if you prefer not to commit generated files:
+# prisma/generated/
+
+# OS artefacts
+.DS_Store
+Thumbs.db
