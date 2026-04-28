@@ -1,20 +1,40 @@
+import "dotenv/config";
 import * as readline from "readline";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { runAgentTurn } from "./agent";
 
 // ---------------------------------------------------------------------------
-//  main — async wrapper, ready for future DB / AI awaits
+//  main — async readline loop wired to the AI agent
 // ---------------------------------------------------------------------------
 async function main(): Promise<void> {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    terminal: false, // non-blocking; works in piped & interactive modes
+    terminal: true,
   });
 
-  console.log("what can I help you with today?");
+  // Persistent conversation history (excludes system prompt — agent prepends it)
+  let history: ChatCompletionMessageParam[] = [];
 
-  // Process each line of input as it arrives
-  rl.on("line", (input: string) => {
+  console.log("\n🚗  Used Car Lot AI — powered by Sumopod");
+  console.log("    Type your question, or 'exit' to quit.\n");
+  console.log("What can I help you with today?\n");
+
+  // Promisify readline so we can await each answer inside an async loop
+  const question = (prompt: string): Promise<string> =>
+    new Promise((resolve) => rl.question(prompt, resolve));
+
+  // Graceful exit on Ctrl+C
+  rl.on("SIGINT", () => {
+    console.log("\nGoodbye!");
+    process.exit(0);
+  });
+
+  while (true) {
+    const input = await question("You: ");
     const trimmed = input.trim();
+
+    if (!trimmed) continue;
 
     if (trimmed === "exit" || trimmed === "quit") {
       console.log("Goodbye!");
@@ -22,13 +42,12 @@ async function main(): Promise<void> {
       process.exit(0);
     }
 
-    console.log(`[Local Test]: ${trimmed}`);
-  });
-
-  // Graceful exit on Ctrl+C (SIGINT) or end-of-stream
-  rl.on("close", () => {
-    process.exit(0);
-  });
+    try {
+      history = await runAgentTurn(history, trimmed);
+    } catch (err) {
+      console.error("\n[Error] Agent call failed:", (err as Error).message, "\n");
+    }
+  }
 }
 
 main().catch((err) => {
