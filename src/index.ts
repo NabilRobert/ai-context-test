@@ -11,7 +11,7 @@ async function main(): Promise<void> {
     input: process.stdin,
     output: process.stdout,
     terminal: true,
-  });
+  })
 
   // Persistent conversation history (excludes system prompt — agent prepends it)
   let history: ChatCompletionMessageParam[] = [];
