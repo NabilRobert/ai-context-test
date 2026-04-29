@@ -1,6 +1,9 @@
 import "dotenv/config";
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import { PrismaClient, VehicleType } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 // ---------------------------------------------------------------------------
 //  Client — Sumopod AI Portal (OpenAI-compatible endpoint)
@@ -80,17 +83,99 @@ Rules:
 };
 
 // ---------------------------------------------------------------------------
-//  Stub tool executor
-//  Replace the body of this function with a real Prisma query when the DB is ready.
+//  Road-trip use-case keywords
+// ---------------------------------------------------------------------------
+const ROAD_TRIP_KEYWORDS = ["road trip", "roadtrip", "camping", "travel", "rv", "van", "sleeps", "camper"];
+
+function isRoadTripIntent(useCase: string): boolean {
+  const lower = useCase.toLowerCase();
+  return ROAD_TRIP_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+// ---------------------------------------------------------------------------
+//  Live Prisma query executor
 // ---------------------------------------------------------------------------
 async function executeSearchCars(args: Record<string, unknown>): Promise<string> {
-  // TODO: swap with:  import { searchCars } from "./db/vehicles";  return JSON.stringify(await searchCars(args));
-  console.log("\n  [DB stub] search_cars called with:", JSON.stringify(args, null, 2));
-  return JSON.stringify({
-    message: "DB not connected yet — stub result returned.",
-    filters: args,
-    results: [],
-  });
+  console.log("\n  [Prisma Query] search_cars called with:", JSON.stringify(args, null, 2));
+
+  try {
+    // ── Build where clause ──────────────────────────────────────────────────
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: Record<string, any> = {
+      quantity: { gt: 0 }, // only show cars actually in stock
+    };
+
+    if (typeof args.minPrice === "number") {
+      where.price = { ...where.price, gte: args.minPrice };
+    }
+    if (typeof args.maxPrice === "number") {
+      where.price = { ...where.price, lte: args.maxPrice };
+    }
+    if (typeof args.make === "string" && args.make) {
+      where.make = { equals: args.make, mode: "insensitive" };
+    }
+    if (typeof args.model === "string" && args.model) {
+      where.model = { equals: args.model, mode: "insensitive" };
+    }
+    if (typeof args.bodyType === "string" && args.bodyType) {
+      where.bodyType = args.bodyType as VehicleType;
+    }
+
+    // ── Road-trip special logic ──────────────────────────────────────────────
+    // If no explicit bodyType was set but useCase signals road-trip intent,
+    // widen the query to include RVs, VANs, and vehicles with road-trip features.
+    if (
+      typeof args.useCase === "string" &&
+      isRoadTripIntent(args.useCase) &&
+      !args.bodyType
+    ) {
+      where.OR = [
+        { bodyType: VehicleType.RV },
+        { bodyType: VehicleType.VAN },
+        { features: { hasSome: ["Bed", "Kitchenette", "Extra Storage", "Solar Panels", "Sleeps 4"] } },
+      ];
+    }
+
+    // ── Query ────────────────────────────────────────────────────────────────
+    const vehicles = await prisma.vehicle.findMany({
+      where,
+      orderBy: { price: "asc" },
+      take: 10, // cap results to keep the AI context lean
+      select: {
+        id: true,
+        make: true,
+        model: true,
+        year: true,
+        price: true,
+        mileage: true,
+        bodyType: true,
+        fuelType: true,
+        transmission: true,
+        condition: true,
+        quantity: true,
+        features: true,
+        description: true,
+        vin: true,
+      },
+    });
+
+    console.log(`  [Prisma Query] Found ${vehicles.length} vehicle(s).\n`);
+
+    return JSON.stringify({
+      count: vehicles.length,
+      filters: args,
+      results: vehicles,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown DB error";
+    console.error("  [Prisma Query] DB error:", message);
+    return JSON.stringify({
+      error: true,
+      message:
+        "I'm having trouble accessing the inventory right now. " +
+        "Please try again in a moment or ask for different filters.",
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

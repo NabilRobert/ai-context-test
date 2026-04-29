@@ -8,9 +8,13 @@
     "dev":         "tsx src/index.ts",
     "db:push":     "prisma db push",
     "db:pull":     "prisma db pull",
+    "db:seed":     "prisma db seed",
     "db:studio":   "prisma studio",
     "db:generate": "prisma generate",
     "db:format":   "prisma format"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
