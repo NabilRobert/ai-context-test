@@ -2,6 +2,11 @@ import "dotenv/config";
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { PrismaClient, VehicleType } from "@prisma/client";
+import { get_encoding } from "tiktoken";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
+import { execSync } from "child_process";
 
 const prisma = new PrismaClient();
 
@@ -15,6 +20,29 @@ const client = new OpenAI({
 
 const MODEL = process.env.AI_MODEL ?? "gpt-4o-mini";
 const MAX_TOKENS = 512; // keep responses tight; bump if needed
+
+// ---------------------------------------------------------------------------
+//  Token & Context Helpers
+// ---------------------------------------------------------------------------
+function countTokens(text: string): number {
+  const enc = get_encoding("o200k_base");
+  const count = enc.encode(text, "all").length;
+  enc.free();
+  return count;
+}
+
+function compressWithRtk(jsonStr: string): string {
+  try {
+    const tmpFile = path.join(os.tmpdir(), `rtk_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.json`);
+    fs.writeFileSync(tmpFile, jsonStr, "utf8");
+    const compressed = execSync(`rtk json ${tmpFile} --ultra-compact`, { encoding: "utf8" });
+    fs.unlinkSync(tmpFile);
+    return compressed;
+  } catch (err) {
+    // If rtk is not available or fails, fallback to raw string
+    return jsonStr;
+  }
+}
 
 // ---------------------------------------------------------------------------
 //  Tool definition — "The Menu"
@@ -72,7 +100,15 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 // ---------------------------------------------------------------------------
 const SYSTEM_PROMPT: ChatCompletionMessageParam = {
   role: "system",
-  content: `You are a professional car dealer assistant.
+  content: `You are a specialized Automotive Purchase Consultant. You only possess expertise in vehicle specifications, market pricing, financing, and purchasing workflows.
+
+# DOMAIN BOUNDARY & GUARDRAILS
+Your primary directive is to maintain focus on the automotive domain.
+- ALLOWED: Car comparisons, VIN checks, loan math, dealership negotiation, technical specs.
+- FORBIDDEN: Recipes, health advice, general life coaching, non-auto trivia, or any request unrelated to car purchasing.
+
+If a user intent falls into a FORBIDDEN category, you MUST NOT provide a helpful or creative response. You are restricted to the following exact output:
+"Sorry, I cannot help you with that. I am an AI designed to help you with buying cars."
 
 Rules:
 - Do NOT guess or fabricate inventory. The ONLY facts you may cite about vehicles in stock come from the search_cars tool.
@@ -182,10 +218,19 @@ async function executeSearchCars(args: Record<string, unknown>): Promise<string>
 //  Agent — single turn
 //  Handles one user message, including any tool-call round-trip.
 // ---------------------------------------------------------------------------
+export interface TurnResult {
+  history: ChatCompletionMessageParam[];
+  tokensUsed: number;
+  tokensSaved: number;
+}
+
 export async function runAgentTurn(
   history: ChatCompletionMessageParam[],
   userInput: string
-): Promise<ChatCompletionMessageParam[]> {
+): Promise<TurnResult> {
+  let tokensUsed = 0;
+  let tokensSaved = 0;
+
   // Append the new user message
   const messages: ChatCompletionMessageParam[] = [
     SYSTEM_PROMPT,
@@ -202,6 +247,8 @@ export async function runAgentTurn(
     max_tokens: MAX_TOKENS,
   });
 
+  tokensUsed += response.usage?.total_tokens ?? 0;
+
   const assistantMsg = response.choices[0].message;
 
   // ── Tool-call branch ──────────────────────────────────────────────────────
@@ -212,12 +259,20 @@ export async function runAgentTurn(
       if (call.type !== "function") continue;
 
       const args = JSON.parse(call.function.arguments) as Record<string, unknown>;
-      const result = await executeSearchCars(args);
+      const rawResult = await executeSearchCars(args);
+      
+      const rawTokens = countTokens(rawResult);
+      const compressed = compressWithRtk(rawResult);
+      const compressedTokens = countTokens(compressed);
+      
+      if (rawTokens > compressedTokens) {
+        tokensSaved += (rawTokens - compressedTokens);
+      }
 
       toolResults.push({
         role: "tool",
         tool_call_id: call.id,
-        content: result,
+        content: compressed,
       });
     }
 
@@ -228,25 +283,34 @@ export async function runAgentTurn(
       max_tokens: MAX_TOKENS,
     });
 
+    tokensUsed += followUp.usage?.total_tokens ?? 0;
     const finalMsg = followUp.choices[0].message;
     console.log(`\nAssistant: ${finalMsg.content ?? ""}\n`);
 
     // Return updated history (without system prompt — it's always prepended)
-    return [
-      ...history,
-      { role: "user", content: userInput },
-      assistantMsg,
-      ...toolResults,
-      { role: "assistant", content: finalMsg.content ?? "" },
-    ];
+    return {
+      history: [
+        ...history,
+        { role: "user", content: userInput },
+        assistantMsg,
+        ...toolResults,
+        { role: "assistant", content: finalMsg.content ?? "" },
+      ],
+      tokensUsed,
+      tokensSaved,
+    };
   }
 
   // ── Direct reply (no tool call) ───────────────────────────────────────────
   console.log(`\nAssistant: ${assistantMsg.content ?? ""}\n`);
 
-  return [
-    ...history,
-    { role: "user", content: userInput },
-    { role: "assistant", content: assistantMsg.content ?? "" },
-  ];
+  return {
+    history: [
+      ...history,
+      { role: "user", content: userInput },
+      { role: "assistant", content: assistantMsg.content ?? "" },
+    ],
+    tokensUsed,
+    tokensSaved,
+  };
 }
