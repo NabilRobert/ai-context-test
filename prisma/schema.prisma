@@ -1,26 +1,13 @@
-// =============================================================================
-//  Used Car Lot — Prisma Schema
-//  Database:   Neon Serverless PostgreSQL (dual-link architecture)
-//  ORM:        Prisma (db push → production-ready, no migration history needed)
-// =============================================================================
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider  = "postgresql"
-  // Pooled connection — used by the application at runtime (PgBouncer, port 6543)
   url       = env("DATABASE_URL")
-  // Direct connection — used by Prisma CLI for migrations / db push (port 5432)
   directUrl = env("DIRECT_URL")
 }
 
-// ---------------------------------------------------------------------------
-//  Enums
-// ---------------------------------------------------------------------------
-
-/// Physical condition of the vehicle as assessed at intake.
 enum VehicleCondition {
   NEW
   LIKE_NEW
@@ -53,32 +40,26 @@ enum Transmission {
   MANUAL
 }
 
-// ---------------------------------------------------------------------------
-//  Models
-// ---------------------------------------------------------------------------
-
-/// Represents a single vehicle listing in the lot inventory.
 model Vehicle {
   id           String       @id @default(uuid())
-  make         String // Brand
+  make         String 
   model        String
   year         Int
-  price        Decimal // Critical for the $15k filter
+  price        Decimal 
   quantity     Int          @default(1)
   mileage      Int
   bodyType     VehicleType
   fuelType     FuelType
   transmission Transmission
-  description  String? // The "Reasoning" source for the AI
-  features     String[] // e.g., ["Solar Panels", "Tow Hitch", "Sleeps 4"]
+  description  String? 
+  features     String[] 
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  // We keep VIN and condition to avoid losing constraints
   vin       String           @unique @db.VarChar(17)
   condition VehicleCondition
 
-  @@index([price]) // Optimizes the budget queries
-  @@index([bodyType]) // Optimizes the "RV vs Car" logic
+  @@index([price]) 
+  @@index([bodyType]) 
   @@map("vehicles")
 }

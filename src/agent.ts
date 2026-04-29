@@ -10,20 +10,14 @@ import { execSync } from "child_process";
 
 const prisma = new PrismaClient();
 
-// ---------------------------------------------------------------------------
-//  Client — Sumopod AI Portal (OpenAI-compatible endpoint)
-// ---------------------------------------------------------------------------
 const client = new OpenAI({
   apiKey: process.env.AI_API_KEY,
   baseURL: process.env.AI_BASE_URL ?? "https://api.openai.com/v1",
 });
 
 const MODEL = process.env.AI_MODEL ?? "gpt-4o-mini";
-const MAX_TOKENS = 512; // keep responses tight; bump if needed
+const MAX_TOKENS = 512;
 
-// ---------------------------------------------------------------------------
-//  Token & Context Helpers
-// ---------------------------------------------------------------------------
 function countTokens(text: string): number {
   const enc = get_encoding("o200k_base");
   const count = enc.encode(text, "all").length;
@@ -39,15 +33,10 @@ function compressWithRtk(jsonStr: string): string {
     fs.unlinkSync(tmpFile);
     return compressed;
   } catch (err) {
-    // If rtk is not available or fails, fallback to raw string
     return jsonStr;
   }
 }
 
-// ---------------------------------------------------------------------------
-//  Tool definition — "The Menu"
-//  The AI is ONLY allowed to know inventory if it explicitly calls this tool.
-// ---------------------------------------------------------------------------
 const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
@@ -95,9 +84,6 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-//  System prompt — "Minimalist" persona
-// ---------------------------------------------------------------------------
 const SYSTEM_PROMPT: ChatCompletionMessageParam = {
   role: "system",
   content: `You are a specialized Automotive Purchase Consultant. You only possess expertise in vehicle specifications, market pricing, financing, and purchasing workflows.
@@ -118,9 +104,6 @@ Rules:
 - If the user's request is vague, ask for the single most important clarifying detail before searching.`,
 };
 
-// ---------------------------------------------------------------------------
-//  Road-trip use-case keywords
-// ---------------------------------------------------------------------------
 const ROAD_TRIP_KEYWORDS = ["road trip", "roadtrip", "camping", "travel", "rv", "van", "sleeps", "camper"];
 
 function isRoadTripIntent(useCase: string): boolean {
@@ -128,17 +111,14 @@ function isRoadTripIntent(useCase: string): boolean {
   return ROAD_TRIP_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
-// ---------------------------------------------------------------------------
-//  Live Prisma query executor
-// ---------------------------------------------------------------------------
+// Executes a live Prisma query based on the arguments
 async function executeSearchCars(args: Record<string, unknown>): Promise<string> {
   console.log("\n  [Prisma Query] search_cars called with:", JSON.stringify(args, null, 2));
 
   try {
-    // ── Build where clause ──────────────────────────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: Record<string, any> = {
-      quantity: { gt: 0 }, // only show cars actually in stock
+      quantity: { gt: 0 },
     };
 
     if (typeof args.minPrice === "number") {
@@ -157,9 +137,6 @@ async function executeSearchCars(args: Record<string, unknown>): Promise<string>
       where.bodyType = args.bodyType as VehicleType;
     }
 
-    // ── Road-trip special logic ──────────────────────────────────────────────
-    // If no explicit bodyType was set but useCase signals road-trip intent,
-    // widen the query to include RVs, VANs, and vehicles with road-trip features.
     if (
       typeof args.useCase === "string" &&
       isRoadTripIntent(args.useCase) &&
@@ -172,11 +149,10 @@ async function executeSearchCars(args: Record<string, unknown>): Promise<string>
       ];
     }
 
-    // ── Query ────────────────────────────────────────────────────────────────
     const vehicles = await prisma.vehicle.findMany({
       where,
       orderBy: { price: "asc" },
-      take: 10, // cap results to keep the AI context lean
+      take: 10,
       select: {
         id: true,
         make: true,
@@ -214,10 +190,7 @@ async function executeSearchCars(args: Record<string, unknown>): Promise<string>
   }
 }
 
-// ---------------------------------------------------------------------------
-//  Agent — single turn
-//  Handles one user message, including any tool-call round-trip.
-// ---------------------------------------------------------------------------
+// Handles one user message, including any tool-call round-trip.
 export interface TurnResult {
   history: ChatCompletionMessageParam[];
   tokensUsed: number;
@@ -231,14 +204,12 @@ export async function runAgentTurn(
   let tokensUsed = 0;
   let tokensSaved = 0;
 
-  // Append the new user message
   const messages: ChatCompletionMessageParam[] = [
     SYSTEM_PROMPT,
     ...history,
     { role: "user", content: userInput },
   ];
 
-  // ── First call ────────────────────────────────────────────────────────────
   const response = await client.chat.completions.create({
     model: MODEL,
     messages,
@@ -251,7 +222,6 @@ export async function runAgentTurn(
 
   const assistantMsg = response.choices[0].message;
 
-  // ── Tool-call branch ──────────────────────────────────────────────────────
   if (assistantMsg.tool_calls && assistantMsg.tool_calls.length > 0) {
     const toolResults: ChatCompletionMessageParam[] = [];
 
@@ -276,7 +246,6 @@ export async function runAgentTurn(
       });
     }
 
-    // Second call — let the model compose its final reply with tool results
     const followUp = await client.chat.completions.create({
       model: MODEL,
       messages: [SYSTEM_PROMPT, ...history, { role: "user", content: userInput }, assistantMsg, ...toolResults],
@@ -287,7 +256,6 @@ export async function runAgentTurn(
     const finalMsg = followUp.choices[0].message;
     console.log(`\nAssistant: ${finalMsg.content ?? ""}\n`);
 
-    // Return updated history (without system prompt — it's always prepended)
     return {
       history: [
         ...history,
@@ -301,7 +269,6 @@ export async function runAgentTurn(
     };
   }
 
-  // ── Direct reply (no tool call) ───────────────────────────────────────────
   console.log(`\nAssistant: ${assistantMsg.content ?? ""}\n`);
 
   return {
