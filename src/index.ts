@@ -43,7 +43,11 @@ async function main(): Promise<void> {
     }
 
     try {
-      history = await runAgentTurn(history, trimmed);
+      const result = await runAgentTurn(history, trimmed);
+      history = result.history;
+      
+      // Print context density auditor stats
+      console.log(`\x1b[90m[Tokens] Used: ${result.tokensUsed} | RTK Saved: ${result.tokensSaved}\x1b[0m\n`);
     } catch (err) {
       console.error("\n[Error] Agent call failed:", (err as Error).message, "\n");
     }
