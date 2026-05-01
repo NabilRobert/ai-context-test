@@ -1,13 +1,24 @@
-# Dependencies
-node_modules/
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
 
-# Environment — NEVER commit real credentials
-.env
+# Node dependencies
+node_modules
 
-# Prisma generated client (regenerate with `prisma generate`)
-# Uncomment the line below if you prefer not to commit generated files:
-# prisma/generated/
+# Logs
+logs
+*.log
 
-# OS artefacts
+# Misc
 .DS_Store
-Thumbs.db
+.fleet
+.idea
+
+# Local env files
+.env
+.env.*
+!.env.example

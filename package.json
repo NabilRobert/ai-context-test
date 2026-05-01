@@ -4,8 +4,10 @@
   "description": "Used Car Lot — Neon + Prisma serverless PostgreSQL backend",
   "license": "MIT",
   "scripts": {
-    "start": "tsx src/index.ts",
-    "dev": "tsx src/index.ts",
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "start": "nuxt start",
+    "cli": "tsx src/index.ts",
     "db:push": "prisma db push",
     "db:pull": "prisma db pull",
     "db:seed": "prisma db seed",
@@ -24,9 +26,14 @@
     "tiktoken": "^1.0.22"
   },
   "devDependencies": {
+    "@nuxtjs/tailwindcss": "^6.14.0",
     "@types/node": "^25.6.0",
+    "nuxt": "^4.4.4",
     "prisma": "^5.22.0",
+    "tailwindcss": "^3.4.19",
     "tsx": "^4.19.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vue": "^3.5.33",
+    "vue-router": "^5.0.6"
   }
 }
