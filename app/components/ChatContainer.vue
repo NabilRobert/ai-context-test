@@ -1,3 +1,28 @@
+<script setup lang="ts">
+import { ref, watch, nextTick } from 'vue'
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
+import MessageBubble from './MessageBubble.vue'
+
+const props = defineProps<{
+  messages: ChatCompletionMessageParam[]
+  isLoading?: boolean
+}>()
+
+const containerRef = ref<HTMLElement | null>(null)
+
+const scrollToBottom = async () => {
+  await nextTick()
+  if (containerRef.value) {
+    containerRef.value.scrollTo({
+      top: containerRef.value.scrollHeight,
+      behavior: 'smooth'
+    })
+  }
+}
+
+watch(() => props.messages, scrollToBottom, { deep: true })
+watch(() => props.isLoading, scrollToBottom)
+</script>
 <template>
   <div class="flex-1 overflow-y-auto p-4 w-full" ref="containerRef">
     <div class="max-w-3xl mx-auto pb-32">
@@ -25,29 +50,3 @@
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
-import MessageBubble from './MessageBubble.vue'
-
-const props = defineProps<{
-  messages: ChatCompletionMessageParam[]
-  isLoading?: boolean
-}>()
-
-const containerRef = ref<HTMLElement | null>(null)
-
-const scrollToBottom = async () => {
-  await nextTick()
-  if (containerRef.value) {
-    containerRef.value.scrollTo({
-      top: containerRef.value.scrollHeight,
-      behavior: 'smooth'
-    })
-  }
-}
-
-watch(() => props.messages, scrollToBottom, { deep: true })
-watch(() => props.isLoading, scrollToBottom)
-</script>

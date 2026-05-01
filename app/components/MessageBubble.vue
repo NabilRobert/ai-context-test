@@ -1,3 +1,13 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
+
+const props = defineProps<{
+  message: ChatCompletionMessageParam
+}>()
+
+const isUser = computed(() => props.message.role === 'user')
+</script>
 <template>
   <div :class="['flex w-full mb-4', isUser ? 'justify-end' : 'justify-start']">
     <div
@@ -21,14 +31,3 @@
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-import { computed } from 'vue'
-import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions'
-
-const props = defineProps<{
-  message: ChatCompletionMessageParam
-}>()
-
-const isUser = computed(() => props.message.role === 'user')
-</script>
